@@ -21,14 +21,12 @@ cursor.execute('''
 ''')
 conn.commit()
 
-# Simple sun sign calculation from birth date (YYYY/MM/DD or YYYY-MM-DD)
+# Simple sun sign from birth date (YYYY/MM/DD or YYYY-MM-DD)
 def get_sun_sign(birth_date):
-    # Normalize to YYYY-MM-DD
     birth_date = birth_date.replace('/', '-')
     parts = birth_date.split('-')
     if len(parts) != 3:
         return 'Unknown'
-    
     month = int(parts[1])
     day = int(parts[2])
 
@@ -46,9 +44,12 @@ def get_sun_sign(birth_date):
     if (month == 2 and day >= 19) or (month == 3 and day <= 20): return 'Pisces'
     return 'Unknown'
 
-# Placeholders for moon and rising (expand later with user input or better lib)
-def get_moon_sign(): return 'Cancer'   # dummy
-def get_rising_sign(): return 'Leo'    # dummy
+# Placeholders for moon & rising (improve later)
+def get_moon_sign():
+    return 'Cancer'  # dummy
+
+def get_rising_sign():
+    return 'Leo'  # dummy
 
 def compatibility_score(user1, user2):
     elements = {
@@ -57,15 +58,10 @@ def compatibility_score(user1, user2):
         'Gemini': 'air', 'Libra': 'air', 'Aquarius': 'air',
         'Cancer': 'water', 'Scorpio': 'water', 'Pisces': 'water'
     }
-    
     score = 0
-    if elements.get(user1.get('sun_sign')) == elements.get(user2.get('sun_sign')):
-        score += 40
-    if elements.get(user1.get('moon_sign')) == elements.get(user2.get('moon_sign')):
-        score += 30
-    if elements.get(user1.get('rising_sign')) == elements.get(user2.get('rising_sign')):
-        score += 30
-    
+    if elements.get(user1.get('sun_sign')) == elements.get(user2.get('sun_sign')): score += 40
+    if elements.get(user1.get('moon_sign')) == elements.get(user2.get('moon_sign')): score += 30
+    if elements.get(user1.get('rising_sign')) == elements.get(user2.get('rising_sign')): score += 30
     return score
 
 @app.route('/')
