@@ -1,8 +1,4 @@
 from flask import Flask, request, jsonify
-from flatlib.datetime import Datetime
-from flatlib.geopos import GeoPos
-from flatlib.chart import Chart
-from flatlib import const
 import sqlite3
 from flask_cors import CORS
 
@@ -25,14 +21,34 @@ cursor.execute('''
 ''')
 conn.commit()
 
-def get_astrology_signs(birth_date, birth_time, lat, lon):
-    dt = Datetime(birth_date, birth_time, 0)  # UTC offset 0
-    pos = GeoPos(lat, lon)
-    chart = Chart(dt, pos)
-    sun   = chart.get(const.SUN)
-    moon  = chart.get(const.MOON)
-    asc   = chart.get(const.ASC)
-    return sun.sign, moon.sign, asc.sign
+# Simple sun sign calculation from birth date (YYYY/MM/DD or YYYY-MM-DD)
+def get_sun_sign(birth_date):
+    # Normalize to YYYY-MM-DD
+    birth_date = birth_date.replace('/', '-')
+    parts = birth_date.split('-')
+    if len(parts) != 3:
+        return 'Unknown'
+    
+    month = int(parts[1])
+    day = int(parts[2])
+
+    if (month == 3 and day >= 21) or (month == 4 and day <= 19): return 'Aries'
+    if (month == 4 and day >= 20) or (month == 5 and day <= 20): return 'Taurus'
+    if (month == 5 and day >= 21) or (month == 6 and day <= 20): return 'Gemini'
+    if (month == 6 and day >= 21) or (month == 7 and day <= 22): return 'Cancer'
+    if (month == 7 and day >= 23) or (month == 8 and day <= 22): return 'Leo'
+    if (month == 8 and day >= 23) or (month == 9 and day <= 22): return 'Virgo'
+    if (month == 9 and day >= 23) or (month == 10 and day <= 22): return 'Libra'
+    if (month == 10 and day >= 23) or (month == 11 and day <= 21): return 'Scorpio'
+    if (month == 11 and day >= 22) or (month == 12 and day <= 21): return 'Sagittarius'
+    if (month == 12 and day >= 22) or (month == 1 and day <= 19): return 'Capricorn'
+    if (month == 1 and day >= 20) or (month == 2 and day <= 18): return 'Aquarius'
+    if (month == 2 and day >= 19) or (month == 3 and day <= 20): return 'Pisces'
+    return 'Unknown'
+
+# Placeholders for moon and rising (expand later with user input or better lib)
+def get_moon_sign(): return 'Cancer'   # dummy
+def get_rising_sign(): return 'Leo'    # dummy
 
 def compatibility_score(user1, user2):
     elements = {
@@ -41,10 +57,15 @@ def compatibility_score(user1, user2):
         'Gemini': 'air', 'Libra': 'air', 'Aquarius': 'air',
         'Cancer': 'water', 'Scorpio': 'water', 'Pisces': 'water'
     }
+    
     score = 0
-    if elements.get(user1.get('sun_sign')) == elements.get(user2.get('sun_sign')): score += 40
-    if elements.get(user1.get('moon_sign')) == elements.get(user2.get('moon_sign')): score += 30
-    if elements.get(user1.get('rising_sign')) == elements.get(user2.get('rising_sign')): score += 30
+    if elements.get(user1.get('sun_sign')) == elements.get(user2.get('sun_sign')):
+        score += 40
+    if elements.get(user1.get('moon_sign')) == elements.get(user2.get('moon_sign')):
+        score += 30
+    if elements.get(user1.get('rising_sign')) == elements.get(user2.get('rising_sign')):
+        score += 30
+    
     return score
 
 @app.route('/')
@@ -65,18 +86,15 @@ def register():
     if not all([name, birth_date, birth_time, birth_place]):
         return jsonify({"error": "Missing required fields"}), 400
 
-    lat, lon = 26.3184, -80.0998  # Deerfield Beach / Parkland area
-
-    try:
-        sun, moon, rising = get_astrology_signs(birth_date, birth_time, lat, lon)
-    except Exception as e:
-        return jsonify({"error": f"Chart calculation failed: {str(e)}"}), 500
+    sun_sign   = get_sun_sign(birth_date)
+    moon_sign  = get_moon_sign()
+    rising_sign = get_rising_sign()
 
     cursor.execute('''
         INSERT INTO users
         (name, birth_date, birth_time, birth_place, sun_sign, moon_sign, rising_sign)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (name, birth_date, birth_time, birth_place, sun, moon, rising))
+    ''', (name, birth_date, birth_time, birth_place, sun_sign, moon_sign, rising_sign))
     
     conn.commit()
     new_id = cursor.lastrowid
@@ -84,7 +102,7 @@ def register():
     return jsonify({
         "message": "User registered successfully",
         "id": new_id,
-        "signs": {"sun": sun, "moon": moon, "rising": rising}
+        "signs": {"sun": sun_sign, "moon": moon_sign, "rising": rising_sign}
     }), 201
 
 @app.route('/match/<int:user_id>', methods=['GET'])
