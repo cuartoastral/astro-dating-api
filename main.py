@@ -44,12 +44,12 @@ def get_sun_sign(birth_date):
     if (month == 2 and day >= 19) or (month == 3 and day <= 20): return 'Pisces'
     return 'Unknown'
 
-# Placeholders for moon & rising (improve later)
+# Placeholders for moon & rising (we can improve later)
 def get_moon_sign():
-    return 'Cancer'  # dummy
+    return 'Cancer'  # dummy - add real calc if needed
 
 def get_rising_sign():
-    return 'Leo'  # dummy
+    return 'Leo'  # dummy - add real calc if needed
 
 def compatibility_score(user1, user2):
     elements = {
