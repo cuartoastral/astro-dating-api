@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify
 import sqlite3
 from flask_cors import CORS
+import requests
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -45,7 +47,7 @@ def get_sun_sign(birth_date):
     if (month == 2 and day >= 19) or (month == 3 and day <= 20): return 'Pisces'
     return 'Unknown'
 
-# Placeholders for Moon and Rising (update later with API)
+# Fallback placeholders
 def get_moon_sign():
     return 'Cancer'
 
@@ -124,19 +126,29 @@ def get_matches(user_id):
     others = cursor.fetchall()
     
     matches = []
+    api_key = os.getenv('ASTRO_API_KEY')
+    
     for other in others:
         other_data = {
             'sun_sign':   other[6],
             'moon_sign':  other[7],
             'rising_sign': other[8]
         }
+        
+        # Simple score (fallback)
         score = compatibility_score(user_data, other_data)
+        
+        # Try synastry API if key exists (future upgrade)
+        synastry_report = "Compatibility: " + str(score) + "% (basic)"
+        if api_key:
+            synastry_report = "Synastry report pending API integration"
         
         if score > 50:
             matches.append({
                 'name': other[1],
                 'score': score,
-                'id': other[0]
+                'id': other[0],
+                'synastry': synastry_report
             })
     
     return jsonify({"matches": matches, "count": len(matches)})
