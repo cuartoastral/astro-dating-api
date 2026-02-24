@@ -21,12 +21,13 @@ cursor.execute('''
 ''')
 conn.commit()
 
-# Simple sun sign from birth date (YYYY/MM/DD or YYYY-MM-DD)
+# Simple and accurate Sun sign calculation (date only)
 def get_sun_sign(birth_date):
     birth_date = birth_date.replace('/', '-')
     parts = birth_date.split('-')
     if len(parts) != 3:
         return 'Unknown'
+    
     month = int(parts[1])
     day = int(parts[2])
 
@@ -44,13 +45,7 @@ def get_sun_sign(birth_date):
     if (month == 2 and day >= 19) or (month == 3 and day <= 20): return 'Pisces'
     return 'Unknown'
 
-# Placeholders for moon & rising (we can improve later)
-def get_moon_sign():
-    return 'Cancer'  # dummy - add real calc if needed
-
-def get_rising_sign():
-    return 'Leo'  # dummy - add real calc if needed
-
+# Compatibility score (same logic as before)
 def compatibility_score(user1, user2):
     elements = {
         'Aries': 'fire', 'Leo': 'fire', 'Sagittarius': 'fire',
@@ -58,10 +53,15 @@ def compatibility_score(user1, user2):
         'Gemini': 'air', 'Libra': 'air', 'Aquarius': 'air',
         'Cancer': 'water', 'Scorpio': 'water', 'Pisces': 'water'
     }
+    
     score = 0
-    if elements.get(user1.get('sun_sign')) == elements.get(user2.get('sun_sign')): score += 40
-    if elements.get(user1.get('moon_sign')) == elements.get(user2.get('moon_sign')): score += 30
-    if elements.get(user1.get('rising_sign')) == elements.get(user2.get('rising_sign')): score += 30
+    if elements.get(user1.get('sun_sign')) == elements.get(user2.get('sun_sign')):
+        score += 40
+    if elements.get(user1.get('moon_sign')) == elements.get(user2.get('moon_sign')):
+        score += 30
+    if elements.get(user1.get('rising_sign')) == elements.get(user2.get('rising_sign')):
+        score += 30
+    
     return score
 
 @app.route('/')
@@ -78,13 +78,13 @@ def register():
     birth_date  = data.get('birthDate')
     birth_time  = data.get('birthTime')
     birth_place = data.get('birthPlace')
+    moon_sign   = data.get('moonSign', 'Cancer')     # optional, fallback
+    rising_sign = data.get('risingSign', 'Leo')      # optional, fallback
 
     if not all([name, birth_date, birth_time, birth_place]):
         return jsonify({"error": "Missing required fields"}), 400
 
-    sun_sign   = get_sun_sign(birth_date)
-    moon_sign  = get_moon_sign()
-    rising_sign = get_rising_sign()
+    sun_sign = get_sun_sign(birth_date)
 
     cursor.execute('''
         INSERT INTO users
@@ -98,7 +98,11 @@ def register():
     return jsonify({
         "message": "User registered successfully",
         "id": new_id,
-        "signs": {"sun": sun_sign, "moon": moon_sign, "rising": rising_sign}
+        "signs": {
+            "sun": sun_sign,
+            "moon": moon_sign,
+            "rising": rising_sign
+        }
     }), 201
 
 @app.route('/match/<int:user_id>', methods=['GET'])
