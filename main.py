@@ -22,7 +22,7 @@ cursor.execute('''
 ''')
 conn.commit()
 
-# Simple Sun sign calculation
+# Accurate Sun sign calculation
 def get_sun_sign(birth_date):
     birth_date = birth_date.replace('/', '-')
     parts = birth_date.split('-')
@@ -45,7 +45,7 @@ def get_sun_sign(birth_date):
     if (month == 2 and day >= 19) or (month == 3 and day <= 20): return 'Pisces'
     return 'Unknown'
 
-# New & improved compatibility algorithm (more astrological feel)
+# Improved compatibility algorithm (more astrological depth)
 def compatibility_score(user1, user2):
     elements = {
         'Aries': 'fire', 'Leo': 'fire', 'Sagittarius': 'fire',
@@ -56,30 +56,43 @@ def compatibility_score(user1, user2):
 
     score = 0
 
-    # 1. Element compatibility (40%)
-    if elements.get(user1.get('sun_sign')) == elements.get(user2.get('sun_sign')):
-        score += 40
-    elif (elements.get(user1.get('sun_sign')) == 'fire' and elements.get(user2.get('sun_sign')) == 'air') or \
-         (elements.get(user1.get('sun_sign')) == 'earth' and elements.get(user2.get('sun_sign')) == 'water'):
-        score += 25
+    # Element harmony (35%)
+    e1 = elements.get(user1.get('sun_sign'))
+    e2 = elements.get(user2.get('sun_sign'))
+    if e1 == e2:
+        score += 35
+    elif (e1 in ['fire', 'air'] and e2 in ['fire', 'air']) or (e1 in ['earth', 'water'] and e2 in ['earth', 'water']):
+        score += 20
 
-    # 2. Sun-Moon emotional harmony (30%)
+    # Sun-Moon emotional connection (30%)
     if user1.get('sun_sign') == user2.get('moon_sign'):
         score += 30
     elif user1.get('moon_sign') == user2.get('sun_sign'):
         score += 25
 
-    # 3. Sun-Rising personality attraction (20%)
+    # Sun-Rising attraction (20%)
     if user1.get('sun_sign') == user2.get('rising_sign'):
         score += 20
     elif user1.get('rising_sign') == user2.get('sun_sign'):
         score += 15
 
-    # 4. Moon-Rising inner/outer harmony (10%)
+    # Moon-Rising inner-outer harmony (15%)
     if user1.get('moon_sign') == user2.get('rising_sign'):
+        score += 15
+
+    # Bonus for same-sign resonance
+    if user1.get('sun_sign') == user2.get('sun_sign'):
         score += 10
 
-    return min(score, 100)  # cap at 100
+    return min(score, 100)
+
+# Descriptive label for score
+def get_compatibility_label(score):
+    if score >= 90: return "Cosmic Soulmates"
+    if score >= 75: return "Strong Cosmic Connection"
+    if score >= 60: return "Good Harmony"
+    if score >= 50: return "Potential Spark"
+    return "Room to Grow"
 
 @app.route('/')
 def home():
@@ -145,11 +158,13 @@ def get_matches(user_id):
             'rising_sign': other[8]
         }
         score = compatibility_score(user_data, other_data)
+        label = get_compatibility_label(score)
         
         if score > 50:
             matches.append({
                 'name': other[1],
                 'score': score,
+                'label': label,
                 'id': other[0]
             })
     
