@@ -12,6 +12,7 @@ cursor.execute('''
     CREATE TABLE IF NOT EXISTS users
     (id INTEGER PRIMARY KEY AUTOINCREMENT,
      name TEXT,
+     email TEXT UNIQUE,
      birth_date TEXT,
      birth_time TEXT,
      birth_place TEXT,
@@ -21,13 +22,12 @@ cursor.execute('''
 ''')
 conn.commit()
 
-# Simple and accurate Sun sign calculation (date only)
+# Simple Sun sign calculation
 def get_sun_sign(birth_date):
     birth_date = birth_date.replace('/', '-')
     parts = birth_date.split('-')
     if len(parts) != 3:
         return 'Unknown'
-    
     month = int(parts[1])
     day = int(parts[2])
 
@@ -45,7 +45,13 @@ def get_sun_sign(birth_date):
     if (month == 2 and day >= 19) or (month == 3 and day <= 20): return 'Pisces'
     return 'Unknown'
 
-# Compatibility score (same logic as before)
+# Placeholders for Moon and Rising (update later with API)
+def get_moon_sign():
+    return 'Cancer'
+
+def get_rising_sign():
+    return 'Leo'
+
 def compatibility_score(user1, user2):
     elements = {
         'Aries': 'fire', 'Leo': 'fire', 'Sagittarius': 'fire',
@@ -53,15 +59,10 @@ def compatibility_score(user1, user2):
         'Gemini': 'air', 'Libra': 'air', 'Aquarius': 'air',
         'Cancer': 'water', 'Scorpio': 'water', 'Pisces': 'water'
     }
-    
     score = 0
-    if elements.get(user1.get('sun_sign')) == elements.get(user2.get('sun_sign')):
-        score += 40
-    if elements.get(user1.get('moon_sign')) == elements.get(user2.get('moon_sign')):
-        score += 30
-    if elements.get(user1.get('rising_sign')) == elements.get(user2.get('rising_sign')):
-        score += 30
-    
+    if elements.get(user1.get('sun_sign')) == elements.get(user2.get('sun_sign')): score += 40
+    if elements.get(user1.get('moon_sign')) == elements.get(user2.get('moon_sign')): score += 30
+    if elements.get(user1.get('rising_sign')) == elements.get(user2.get('rising_sign')): score += 30
     return score
 
 @app.route('/')
@@ -75,34 +76,34 @@ def register():
         return jsonify({"error": "No JSON data received"}), 400
 
     name        = data.get('name')
+    email       = data.get('email')
     birth_date  = data.get('birthDate')
     birth_time  = data.get('birthTime')
     birth_place = data.get('birthPlace')
-    moon_sign   = data.get('moonSign', 'Cancer')     # optional, fallback
-    rising_sign = data.get('risingSign', 'Leo')      # optional, fallback
 
-    if not all([name, birth_date, birth_time, birth_place]):
+    if not all([name, email, birth_date, birth_time, birth_place]):
         return jsonify({"error": "Missing required fields"}), 400
 
-    sun_sign = get_sun_sign(birth_date)
+    sun_sign   = get_sun_sign(birth_date)
+    moon_sign  = get_moon_sign()
+    rising_sign = get_rising_sign()
 
-    cursor.execute('''
-        INSERT INTO users
-        (name, birth_date, birth_time, birth_place, sun_sign, moon_sign, rising_sign)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (name, birth_date, birth_time, birth_place, sun_sign, moon_sign, rising_sign))
-    
-    conn.commit()
-    new_id = cursor.lastrowid
+    try:
+        cursor.execute('''
+            INSERT INTO users
+            (name, email, birth_date, birth_time, birth_place, sun_sign, moon_sign, rising_sign)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (name, email, birth_date, birth_time, birth_place, sun_sign, moon_sign, rising_sign))
+        
+        conn.commit()
+        new_id = cursor.lastrowid
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Email already registered"}), 400
     
     return jsonify({
         "message": "User registered successfully",
         "id": new_id,
-        "signs": {
-            "sun": sun_sign,
-            "moon": moon_sign,
-            "rising": rising_sign
-        }
+        "signs": {"sun": sun_sign, "moon": moon_sign, "rising": rising_sign}
     }), 201
 
 @app.route('/match/<int:user_id>', methods=['GET'])
@@ -114,9 +115,9 @@ def get_matches(user_id):
         return jsonify({"error": "User not found"}), 404
     
     user_data = {
-        'sun_sign':   user[5],
-        'moon_sign':  user[6],
-        'rising_sign': user[7]
+        'sun_sign':   user[6],
+        'moon_sign':  user[7],
+        'rising_sign': user[8]
     }
     
     cursor.execute('SELECT * FROM users WHERE id != ?', (user_id,))
@@ -125,9 +126,9 @@ def get_matches(user_id):
     matches = []
     for other in others:
         other_data = {
-            'sun_sign':   other[5],
-            'moon_sign':  other[6],
-            'rising_sign': other[7]
+            'sun_sign':   other[6],
+            'moon_sign':  other[7],
+            'rising_sign': other[8]
         }
         score = compatibility_score(user_data, other_data)
         
