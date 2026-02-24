@@ -1,51 +1,124 @@
 from flask import Flask, request, jsonify
 import sqlite3
 from flask_cors import CORS
+import requests
 
 app = Flask(__name__)
 CORS(app)
 
-# Database setup with email
+# Database setup
 conn = sqlite3.connect('users.db', check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS users
     (id INTEGER PRIMARY KEY AUTOINCREMENT,
      name TEXT,
-     email TEXT UNIQUE,
      birth_date TEXT,
      birth_time TEXT,
      birth_place TEXT,
      sun_sign TEXT,
      moon_sign TEXT,
-     rising_sign TEXT)
+     rising_sign TEXT,
+     venus_sign TEXT,
+     mars_sign TEXT,
+     jupiter_sign TEXT)
 ''')
 conn.commit()
 
-# Accurate Sun sign calculation
-def get_sun_sign(birth_date):
-    birth_date = birth_date.replace('/', '-')
-    parts = birth_date.split('-')
-    if len(parts) != 3:
-        return 'Unknown'
-    month = int(parts[1])
-    day = int(parts[2])
+# Get lat/lon from birth_place using free geocode API (handles all countries)
+def get_lat_lon(birth_place):
+    url = f"https://nominatim.openstreetmap.org/search?q={birth_place}&format=json&limit=1"
+    headers = {'User-Agent': 'AstroDatingApp/1.0'}
+    try:
+        resp = requests.get(url, headers=headers).json()
+        if resp:
+            return float(resp[0]['lat']), float(resp[0]['lon'])
+    except:
+        pass
+    # Fallback to Deerfield Beach, FL
+    return 26.3184, -80.0998
 
-    if (month == 3 and day >= 21) or (month == 4 and day <= 19): return 'Aries'
-    if (month == 4 and day >= 20) or (month == 5 and day <= 20): return 'Taurus'
-    if (month == 5 and day >= 21) or (month == 6 and day <= 20): return 'Gemini'
-    if (month == 6 and day >= 21) or (month == 7 and day <= 22): return 'Cancer'
-    if (month == 7 and day >= 23) or (month == 8 and day <= 22): return 'Leo'
-    if (month == 8 and day >= 23) or (month == 9 and day <= 22): return 'Virgo'
-    if (month == 9 and day >= 23) or (month == 10 and day <= 22): return 'Libra'
-    if (month == 10 and day >= 23) or (month == 11 and day <= 21): return 'Scorpio'
-    if (month == 11 and day >= 22) or (month == 12 and day <= 21): return 'Sagittarius'
-    if (month == 12 and day >= 22) or (month == 1 and day <= 19): return 'Capricorn'
-    if (month == 1 and day >= 20) or (month == 2 and day <= 18): return 'Aquarius'
-    if (month == 2 and day >= 19) or (month == 3 and day <= 20): return 'Pisces'
-    return 'Unknown'
+# Zodiac sign from longitude
+def get_zodiac_sign(longitude):
+    deg = longitude % 360
+    if 0 <= deg < 30: return 'Aries'
+    if 30 <= deg < 60: return 'Taurus'
+    if 60 <= deg < 90: return 'Gemini'
+    if 90 <= deg < 120: return 'Cancer'
+    if 120 <= deg < 150: return 'Leo'
+    if 150 <= deg < 180: return 'Virgo'
+    if 180 <= deg < 210: return 'Libra'
+    if 210 <= deg < 240: return 'Scorpio'
+    if 240 <= deg < 270: return 'Sagittarius'
+    if 270 <= deg < 300: return 'Capricorn'
+    if 300 <= deg < 330: return 'Aquarius'
+    return 'Pisces'
 
-# Improved compatibility algorithm (more astrological depth)
+# Draft natal chart (positions of planets)
+def get_natal_chart(birth_date, birth_time, lat, lon):
+    # Use approximate formulas - for full accuracy, use API
+    # Print the chart for debugging
+    print("Natal Chart for: ", birth_date, birth_time, lat, lon)
+    
+    # Sun: simple date-based
+    sun_sign = get_sun_sign(birth_date)
+    
+    # Moon: approximate longitude (Meeus-inspired, rough)
+    # J0 = 2451545.0 (2000 Jan 1.5)
+    jd = date_to_jd(birth_date, birth_time)
+    d = jd - 2451545.0
+    moon_long = (218.32 + 13.176396 * d) % 360  # Approximate mean longitude
+    moon_sign = get_zodiac_sign(moon_long)
+    
+    # Venus: approximate (orbital period 224.7 days, mean longitude)
+    venus_long = (181.98 + 1.602130 * d) % 360
+    venus_sign = get_zodiac_sign(venus_long)
+    
+    # Mars: approximate (687 days)
+    mars_long = (355.43 + 0.524033 * d) % 360
+    mars_sign = get_zodiac_sign(mars_long)
+    
+    # Jupiter: approximate (4332 days)
+    jupiter_long = (34.35 + 0.0829 * d) % 360
+    jupiter_sign = get_zodiac_sign(jupiter_long)
+    
+    # Ascendant: approximate sidereal time
+    lst = jd_to_lst(jd, lon)
+    asc_long = (lst - 90) % 360
+    rising_sign = get_zodiac_sign(asc_long)
+    
+    chart = {
+        'sun': sun_sign,
+        'moon': moon_sign,
+        'venus': venus_sign,
+        'mars': mars_sign,
+        'jupiter': jupiter_sign,
+        'rising': rising_sign
+    }
+    
+    print("Chart Positions:", chart)
+    
+    return chart
+
+# Helper: Date to Julian Day (rough)
+def date_to_jd(birth_date, birth_time):
+    y, m, d = map(int, birth_date.split('/'))
+    h, mm = map(int, birth_time.split(':'))
+    if m <= 2:
+        y -= 1
+        m += 12
+    a = y // 100
+    b = 2 - a + (a // 4)
+    jd = int(365.25 * (y + 4716)) + int(30.7 * (m + 1)) + d + b - 1524.5 + (h + mm/60)/24
+    return jd
+
+# Helper: JD to Local Sidereal Time (rough)
+def jd_to_lst(jd, lon):
+    s0 = jd - 2451545.0
+    s = 280.46061837 + 360.98564736629 * s0 + lon
+    return s % 360
+
+# Compatibility using all planets
 def compatibility_score(user1, user2):
     elements = {
         'Aries': 'fire', 'Leo': 'fire', 'Sagittarius': 'fire',
@@ -56,43 +129,31 @@ def compatibility_score(user1, user2):
 
     score = 0
 
-    # Element harmony (35%)
-    e1 = elements.get(user1.get('sun_sign'))
-    e2 = elements.get(user2.get('sun_sign'))
-    if e1 == e2:
-        score += 35
-    elif (e1 in ['fire', 'air'] and e2 in ['fire', 'air']) or (e1 in ['earth', 'water'] and e2 in ['earth', 'water']):
+    # Sun-Sun element (20%)
+    if elements.get(user1['sun']) == elements.get(user2['sun']):
         score += 20
 
-    # Sun-Moon emotional connection (30%)
-    if user1.get('sun_sign') == user2.get('moon_sign'):
-        score += 30
-    elif user1.get('moon_sign') == user2.get('sun_sign'):
-        score += 25
-
-    # Sun-Rising attraction (20%)
-    if user1.get('sun_sign') == user2.get('rising_sign'):
+    # Moon-Moon emotional (20%)
+    if elements.get(user1['moon']) == elements.get(user2['moon']):
         score += 20
-    elif user1.get('rising_sign') == user2.get('sun_sign'):
+
+    # Venus-Venus love (15%)
+    if elements.get(user1['venus']) == elements.get(user2['venus']):
         score += 15
 
-    # Moon-Rising inner-outer harmony (15%)
-    if user1.get('moon_sign') == user2.get('rising_sign'):
+    # Mars-Mars energy (15%)
+    if elements.get(user1['mars']) == elements.get(user2['mars']):
         score += 15
 
-    # Bonus for same-sign resonance
-    if user1.get('sun_sign') == user2.get('sun_sign'):
-        score += 10
+    # Jupiter-Jupiter growth (15%)
+    if elements.get(user1['jupiter']) == elements.get(user2['jupiter']):
+        score += 15
 
-    return min(score, 100)
+    # Rising-Rising outer (15%)
+    if elements.get(user1['rising']) == elements.get(user2['rising']):
+        score += 15
 
-# Descriptive label for score
-def get_compatibility_label(score):
-    if score >= 90: return "Cosmic Soulmates"
-    if score >= 75: return "Strong Cosmic Connection"
-    if score >= 60: return "Good Harmony"
-    if score >= 50: return "Potential Spark"
-    return "Room to Grow"
+    return score
 
 @app.route('/')
 def home():
@@ -105,32 +166,30 @@ def register():
         return jsonify({"error": "No JSON data received"}), 400
 
     name        = data.get('name')
-    email       = data.get('email')
     birth_date  = data.get('birthDate')
     birth_time  = data.get('birthTime')
     birth_place = data.get('birthPlace')
 
-    if not all([name, email, birth_date, birth_time, birth_place]):
-        return jsonify({"error": "Missing required fields (name, email, birthDate, birthTime, birthPlace)"}), 400
+    if not all([name, birth_date, birth_time, birth_place]):
+        return jsonify({"error": "Missing required fields"}), 400
 
-    sun_sign = get_sun_sign(birth_date)
+    lat, lon = get_lat_lon(birth_place)
+    chart = get_natal_chart(birth_date, birth_time, lat, lon)
 
-    try:
-        cursor.execute('''
-            INSERT INTO users
-            (name, email, birth_date, birth_time, birth_place, sun_sign, moon_sign, rising_sign)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (name, email, birth_date, birth_time, birth_place, sun_sign, 'Unknown', 'Unknown'))
-        
-        conn.commit()
-        new_id = cursor.lastrowid
-    except sqlite3.IntegrityError:
-        return jsonify({"error": "Email already registered"}), 400
+    cursor.execute('''
+        INSERT INTO users
+        (name, birth_date, birth_time, birth_place, sun_sign, moon_sign, rising_sign, venus_sign, mars_sign, jupiter_sign)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (name, birth_date, birth_time, birth_place, chart['sun'], chart['moon'], chart['rising'], chart['venus'], chart['mars'], chart['jupiter']))
+    
+    conn.commit()
+    
+    new_id = cursor.lastrowid
     
     return jsonify({
         "message": "User registered successfully",
         "id": new_id,
-        "signs": {"sun": sun_sign, "moon": "Unknown", "rising": "Unknown"}
+        "signs": chart
     }), 201
 
 @app.route('/match/<int:user_id>', methods=['GET'])
@@ -142,9 +201,12 @@ def get_matches(user_id):
         return jsonify({"error": "User not found"}), 404
     
     user_data = {
-        'sun_sign':   user[6],
-        'moon_sign':  user[7],
-        'rising_sign': user[8]
+        'sun': user[5],
+        'moon': user[6],
+        'rising': user[7],
+        'venus': user[8],
+        'mars': user[9],
+        'jupiter': user[10]
     }
     
     cursor.execute('SELECT * FROM users WHERE id != ?', (user_id,))
@@ -153,22 +215,26 @@ def get_matches(user_id):
     matches = []
     for other in others:
         other_data = {
-            'sun_sign':   other[6],
-            'moon_sign':  other[7],
-            'rising_sign': other[8]
+            'sun': other[5],
+            'moon': other[6],
+            'rising': other[7],
+            'venus': other[8],
+            'mars': other[9],
+            'jupiter': other[10]
         }
         score = compatibility_score(user_data, other_data)
-        label = get_compatibility_label(score)
         
         if score > 50:
             matches.append({
                 'name': other[1],
                 'score': score,
-                'label': label,
                 'id': other[0]
             })
     
-    return jsonify({"matches": matches, "count": len(matches)})
+    return jsonify({
+        "matches": matches,
+        "count": len(matches)
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True)
